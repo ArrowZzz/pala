@@ -41,7 +41,8 @@ test:
 	$(GO) test $(GO_TEST_ARGS) $(THUNDER2_PKGS)
 
 .PHONY: dep
-dep: src/thunder2/Gopkg.dep
+dep:
+	src/thunder2/Gopkg.dep
 
 %.dep: %.toml
 	@md5sum $< > $@.cur

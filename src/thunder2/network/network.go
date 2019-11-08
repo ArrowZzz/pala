@@ -222,7 +222,7 @@ func (h *Host) Send(handle ConnectionHandle, m *Message) error {
 	defer h.mutex.Unlock()
 
 	if c, ok := h.connections[handle]; !ok {
-		return errors.Errorf("failed to send message (type=%d); handle %s not exist",
+		return errors.Errorf("failed to send message (type=%d); handle %d not exist",
 			m.GetType(), handle)
 	} else {
 		p := newPacket(m)

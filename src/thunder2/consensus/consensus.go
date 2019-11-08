@@ -445,7 +445,7 @@ func (n *Node) onReceivedProposal(p blockchain.Proposal, ctx proposalContext) er
 				// We only store blocks with "proofs", i.e., either a notarized block or a proposal.
 				// There is no way to have a different proposal at the same BlockSn.
 				return errors.Errorf("two proposal at %s have different hash; new vs. old: "+
-					"%s != %s; reject the new one", sn, b.GetHash(), b.GetHash(), b2.GetHash())
+					"%s != %s; reject the new one", sn, b.GetHash(), b2.GetHash())
 			}
 		} else {
 			// To avoid double voting on the same BlockSn, insert the block before voting on the proposal.
