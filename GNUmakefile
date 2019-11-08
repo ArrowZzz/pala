@@ -41,8 +41,7 @@ test:
 	$(GO) test $(GO_TEST_ARGS) $(THUNDER2_PKGS)
 
 .PHONY: dep
-dep:
-	src/thunder2/Gopkg.dep
+dep: src/thunder2/Gopkg.dep
 
 %.dep: %.toml
 	@md5sum $< > $@.cur
@@ -50,7 +49,7 @@ dep:
 
 .PHONY: clean-dep
 clean-dep:
-	rm -rf $(TOP_DIR)/src/thunder2/vendor $(TOP_DIR)/src/thunder2/Gopkg.dep
+	rm -rf $(TOP_DIR)/src/thunder2/vendor $(TOP_DIR)/src/thunder2/Gopkg.dep $(TOP_DIR)/src/thunder2/Gopkg.lock
 
 .PHONY: lint
 lint:
