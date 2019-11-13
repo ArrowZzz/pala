@@ -1,5 +1,4 @@
-PaLa - doubly pipelined scheme
-==============================
+# PaLa - doubly pipelined scheme
 
 We can separate the consensus protocol into two layers:
 1. The consensus layer: PaLa, PiLi, Thunderella, etc.
@@ -14,12 +13,14 @@ as a proposer, voter, and data archival full node simultaneously.
 The right behavior to take should be determined by checking whether a node is acting as
 the corresponding role when a particular event occurs.
 
-This pseudo code also covers committee switches, even though it's not
+The pseudo code also covers committee switches, even though it's not
 mentioned explicitly. A committee switch event occurs whenever a block
 storing a new election result is finalized.
 We notify the network layer to make the required connection changes when this happens.
 
-The consensus layer requires its different data types to be sent and received based on
+## Consensus Layer
+
+The consensus layer requires its different messages to be sent and received based on
 the following rules:
 * The primary proposer sends proposals to all voters and standby proposers.
 * The voters send their votes to the primary proposer.
@@ -33,116 +34,98 @@ There are also heartbeat messages, which contain the status of its originating n
 * the sequence number of the last block of the freshest notarized chain.
 Heartbeat messages are sent to all connected nodes.
 
-network layer
--------------
+## Network Layer
 
-A hub-and-spoke network connection topology could satisfy the data transport requirements
-of the consensus layer where proposers/voters would map to hubs/spokes.
+A hub-and-spoke network connection topology could satisfy the data transport requirements of the consensus layer where proposers/voters would map to hubs/spokes.
 
 An implementation could use TCP connections for all connections between nodes.
 
-See the software architecture proposal for details
-https://docs.google.com/presentation/d/1WlGYLMuQ5SQHCf1KOvaZOY2EKwOFfACG0dTcSjMKjQs/edi
-
-Notations
---------------
+## Conventions
 
 * Functions use CamelCase.
 * Variables use snake_case.
 * Enumerations/Constants use ALL_CAPS
 * When there are many different variables of one type of data,
   use {...} to indicate which one is referenced. For example, voter{5} is the 5th voter.
-* "x := Foo(...)" means "assign the returned value of Foo(...) to the variable x".
-* self.x means that x is a member field.
+* "x := Foo(...)" means "assign the return value of Foo(...) to the variable x".
+* self.x means that x is a member field of the object self.
 
+## Notations
+### Variables
+* **K**: the number of outstanding unnotarized proposals.
+* **Np**: the number of proposers.
+* **Nv**: the number of voters.
+* **proposer{i}**: the i'th proposer.
+* **voter{i}**: the i'th voter.
+* **local_epoch**: the local epoch as defined in the paper.
+* **seq**: the tuple of (epoch, s) also written as (e, s) where s is a monotonic increasing integer beginning with 1
+* **block{seq}**: the block created at seq = (e, s), i.e. the s'th block created at local_epoch = e.
+* **proposal{seq}**: a proposal that contains block{seq} and the proposer's signature.
+* **vote{voter{i}, seq}** : a vote for block{seq} from voter{i} at local_epoch = seq.e.
+* **nota{seq}**: a notarization of block{seq}. **Note** that there may be multiple different and valid nota{seq}'s.
+* **clock{voter{i}, e}**: the timeout message sent by voter{i} at local_epoch = e-1
+* **clock_nota{e}**: the notarization of clock{voter{i}, e}.
+  * _Question**_: a notarization should not have voter{i}, should it?
+* **chain**: represents block{(0, 1)}->...->block{seq} where block{seq} is the last block.
+* **chain[i]**: the i'th block; chain[-1] is the last block.
+* **chain[i].seq**: the i'th block's sequence. The sequence is in the form of seq, i.e. (epoch, s).
+* **notarized_chain**: a chain whose blocks are all notarized.
+  E.g., block{(0, 1)}->block{(1, 1)}->...->block{seq} with {nota{(1, 1)}..., nota{seq}}, where block{(0, 1)} is the genesis block and is treated as notarized even though it has no notarization (signatures).
+* **blockchain**: represents the database which stores the data of the chain.
+* **freshest_notarized_chain**: a notarized chain, say chain_x, is a freshest notarized chain if chain_x[-1].seq >= notarized_chain[-1].seq for each notarized_chain.
+* **self**: the consensus node itself.
+  _Question:_ should it be any node?
+* **delta**: a configurable variable used to estimate the time of delivering a message.
+* **1sec**: 6*delta
+* **1min**: 6*1sec
 
-Identifiers
----------
+### Functions
+* **IsPrimaryProposer(self, e)**: whether _self_ is the primary proposer at local_epoch = e.
+* **IsVoter(self, e)**: whether _self_ is a voter at local_epoch = e.
+* **Finalized(freshest_notarized_chain)**: return the finalized chain given the freshest notarized chain.
 
-* K                       : the number of outstanding unnotarized proposals.
-* Np                      : the number of proposers.
-* Nv                      : the number of voters.
-* proposer{i}             : the i'th proposer.
-* voter{i}                : the i'th voter.
-* local_epoch             : the local epoch as defined in the paper.
-* seq                     : (epoch, s) also written as (e, s) where s is a serial number
-* block{seq}              : the block created at seq = (e, s), i.e. the s'th block
-                            created at local_epoch = e;
-* proposal{seq}           : a proposal that contains block{seq} and the proposer's signature.
-* vote{voter{i}, seq}     : a vote for block{seq} from voter{i} at local_epoch = seq.e.
-* nota{seq}               : a notarization of block{seq}. Note that there may be
-                            multiple different and valid nota{seq}'s.
-* clock{voter{i}, e}      : the timeout message sent by voter{i} at local_epoch = e-1
-* clock_nota{e}           : the notarization of clock{voter{i}, e}.
+## Common Code of Proposer and Voter
 
-* chain                   : represents block{(0, 1)}->...->block{seq} where block{seq} is the last block.
-* chain[i]                : the i'th block; chain[-1] is the last block.
-* chain[i].seq            : the i'th block's sequence;
-                            the sequence is in the form of seq, i.e. (epoch, s).
-* notarized_chain         : a chain whose blocks are all notarized.
-                            E.g., block{(0, 1)}->block{(1, 1)}->...->block{seq}
-                            with {nota{(1, 1)}..., nota{seq}}, where block{(0, 1)} is the genesis
-                            block and is treated as notarized even though it has no notarization.
-* blockchain              : represents the database which stores the data of the chain.
-* freshest_notarized_chain: defined as:
-                            freshest_notarized_chain[-1].seq >= notarized_chain[-1].seq
-                            for each notarized_chain.
-* self                    : the consensus node itself.
-* IsPrimaryProposer(self, e) : whether self is the primary proposer at local_epoch = e.
-* IsVoter(self, e)        : whether self is a voter at local_epoch = e.
-* Finalized(freshest_notarized_chain): returns the finalized chain given the freshest notarized chain.
+* NOTE: only blockchain stores permanent data.
 
-* delta                   : a config variable used to estimate the time of delivering a message.
-* 1sec                    : 6*delta
-* 1min                    : 6*1sec
+```
+func Main(self):
+  self.blockchain := LoadBlockChain()
+  self.freshest_notarized_chain := CreateFreshestNotarizedChain(self.blockchain, 0)
+  self.clocks := CreateClockMap() # key: epoch; value: a set of clock{voter{i}, e}}
+  self.votes := CreateVotesMap()  # key: seq; value: a set of vote{voter{i}, seq}}
+  self.has_voted := CreateSet()   # key: seq
+  self.unnotarized_proposals := CreateProposalMap()  # key: seq; value: proposal{seq}
+  self.uninserted_proposals := CreateProposalMap()  # key: seq; value: proposal{seq}
+  self.unvoted_proposals := CreateProposalMap()  # key: seq; value: proposal{seq}
+  self.local_epoch := LoadEpochFromDisk()
+  OnEpochChanged(self.local_epoch)
+  StartNetwork() # Start threads to process the network layer
+  StartEventLoop() # Wait for callbacks OnXXX() to fire and advance the system state.
+  
+func LoadBlockChain():
+  # Load blockchain data from disk.
+  # Question: how about a new participants? Where does it retrieve existing data?
+  # If there is no data, create and insert the genesis block, block{(0, 1)}.
+  # NOTE: there is no nota{(0, 1)}. Just treat block{(0, 1)} as notarized.
+  ...
 
+func LoadEpochFromDisk(): -> int
+  # Read clock notarization saved by SaveEpochToDisk()
+  # If there is anything wrong, use freshest_notarized_chain[-1].seq.e instead.
+    ...
+```
+* Implementation notes:
+  * All callbacks/functions are called in the same thread (no lock by default).
+  * Let nota{seq'} be the notarization of some ancestor block.
+  * Store nota{seq'} in block{seq} where block{seq'} is the k'th ancestor of block{seq}
+  * If seq is (e, 1), store in this block, the notarization of up to the last k blocks that belong to the same epoch as the parent block of (e, 1).
 
-The common code of Proposer and Voter
--------------------------------------
-
-    # Implementation notes: only blockchain stores permanent data.
-
-    func Main(self):
-      self.blockchain := LoadBlockChain()
-      self.freshest_notarized_chain := CreateFreshestNotarizedChain(self.blockchain, 0)
-      self.clocks := CreateClockMap() # key: epoch; value: a set of clock{voter{i}, e}}
-      self.votes := CreateVotesMap()  # key: seq; value: a set of vote{voter{i}, seq}}
-      self.has_voted := CreateSet()   # key: seq
-      self.unnotarized_proposals := CreateProposalMap()  # key: seq;
-                                                         # value: proposal{seq}
-      self.uninserted_proposals := CreateProposalMap()  # key: seq;
-                                                        # value: proposal{seq}
-      self.unvoted_proposals := CreateProposalMap()  # key: seq;
-                                                     # value: proposal{seq}
-      self.local_epoch := LoadEpochFromDisk()
-      OnEpochChanged(self.local_epoch)
-      StartNetwork()                # Start threads to process the network layer
-      StartEventLoop()              # Wait for callbacks OnXXX() to fire and advance the system state.
-
-
-    func LoadBlockChain():
-      # Load blockchain data from disk.
-      # If there is no data, create and insert the genesis block, block{(0, 1)}.
-      # NOTE: there is no nota{(0, 1)}. Just treat block{(0, 1)} as notarized.
-      ...
-
-
-    func LoadEpochFromDisk(): -> int
-      # Read clock notarization saved by SaveEpochToDisk()
-      # If there is anything wrong, use freshest_notarized_chain[-1].seq.e instead.
-      ...
-
-    # Implementation notes:
-    # 1. All callbacks/functions are called in the same thread (no lock by default).
-    # 2. Let nota{seq'} be the notarization of some ancestor block.
-    #    Store nota{seq'} in block{seq} where block{seq'} is the k'th ancestor of block{seq}
-    #    If seq is (e, 1), store in this block, the notarization of up to the last k blocks that belong
-    #    to the same epoch as the parent block of (e, 1).
-
-    func OnReceivedNotarizedBlock(self, nota{seq}, block{seq}): -> boolean
-      if Verify(nota{seq}, block{seq}) == false:
-        return false
-      OnReceivedBlock(block{seq})
+```
+func OnReceivedNotarizedBlock(self, nota{seq}, block{seq}): -> boolean
+  if Verify(nota{seq}, block{seq}) == false:
+    return false
+  OnReceivedBlock(block{seq})
 
 
     # NOTE: To prevent potential attacks such as sending a lot of blocks to cause a denial of service,
@@ -194,7 +177,6 @@ The common code of Proposer and Voter
 
     func OnNewNodeConnected(self, new_node):
       PerformReconciliation(self, new_node)
-
 
     # NOTE: proposers/voters use TCP connections, so the received proposals should be in order.
     # Here are the scenarios of calling this function:
@@ -481,12 +463,11 @@ The common code of Proposer and Voter
 
     func SendToPrimaryProposer(event):
       ...
+```
 
 
-
-The voter-only code (assume it's voter{i})
-------------------------------------------
-
+## The Voter-only Code (assume it's voter{i})
+```
     # NOTE: Here are the scenarios of calling this function:
     # 1. OnReceivedProposal: the normal case.
     # 2. OnFreshestNotarizedChainExtended: the normal case
@@ -538,20 +519,22 @@ The voter-only code (assume it's voter{i})
         CatchUp(seq.e, seq, -1)
 
 
-    func OnTimeout(self, e):
-      if IsVoter(self, e) and e == self.local_epoch:
-        ReliableBroadcastEvent(clock{voter{i}, self.local_epoch + 1})
+func OnTimeout(self, e):
+  if IsVoter(self, e) and e == self.local_epoch:
+    ReliableBroadcastEvent(clock{voter{i}, self.local_epoch + 1})
+```
 
-
-The proposer-only code (assume it's proposer{i})
+The Proposer-Only code (assume it's proposer{i})
 ------------------------------------------------
-    func StartCreatingNewBlocks(blockchain):
-      # Request blockchain to starts creating new blocks.
-      # When a new block is created, forward it to the consensus node via OnReceivedBlock().
-      # blockchain is responsible to create at least K outstanding unnotarized blocks.
-      # The consensus node is responsible for adding notarizations to the blockchain later.
-      ...
+```
+func StartCreatingNewBlocks(blockchain):
+  # Request blockchain to starts creating new blocks.
+  # When a new block is created, forward it to the consensus node via OnReceivedBlock().
+  # blockchain is responsible to create at least K outstanding unnotarized blocks.
+  # The consensus node is responsible for adding notarizations to the blockchain later.
+  ...
 
-    func StopCreatingNewBlocks(blockchain):
-      # Request blockchain to stops creating new blocks
-      ...
+func StopCreatingNewBlocks(blockchain):
+  # Request blockchain to stops creating new blocks
+  ...
+```
