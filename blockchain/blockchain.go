@@ -3,8 +3,8 @@ package blockchain
 import (
 	"encoding/binary"
 	"fmt"
-	"thunder2/lgr"
-	"thunder2/utils"
+	"pala/lgr"
+	"pala/utils"
 
 	"github.com/petar/GoLLRB/llrb"
 	"github.com/pkg/errors"

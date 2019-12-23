@@ -1,9 +1,9 @@
 package consensus
 
 import (
+	"pala/blockchain"
+	"pala/network"
 	"testing"
-	"thunder2/blockchain"
-	"thunder2/network"
 	"time"
 
 	"github.com/stretchr/testify/require"

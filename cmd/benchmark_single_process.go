@@ -3,12 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"thunder2/blockchain"
-	"thunder2/consensus"
-	"thunder2/lgr"
-	"thunder2/network"
-	"thunder2/testutils"
-	"thunder2/utils"
+	"pala/blockchain"
+	"pala/consensus"
+	"pala/lgr"
+	"pala/network"
+	"pala/testutils"
+	"pala/utils"
 	"time"
 )
 

@@ -4,11 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"pala/blockchain"
+	"pala/network"
+	"pala/utils"
 	"sort"
 	"strings"
-	"thunder2/blockchain"
-	"thunder2/network"
-	"thunder2/utils"
 	"time"
 
 	"github.com/petar/GoLLRB/llrb"
@@ -1250,8 +1250,8 @@ func (m *Mediator) GetDebugState() <-chan DebugState {
 func (m *Mediator) getStatus() Status {
 	fsh := m.chain.GetFreshestNotarizedChain()
 	return Status{
-		FncBlockSn: fsh.GetBlockSn(),
-		Epoch:      m.epochManager.GetEpoch(),
+		FncBlockSn:               fsh.GetBlockSn(),
+		Epoch:                    m.epochManager.GetEpoch(),
 		ReconfFinalizedByBlockSn: m.reconfFinalizedByBlockSn,
 	}
 }

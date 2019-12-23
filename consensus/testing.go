@@ -2,11 +2,11 @@
 package consensus
 
 import (
+	"pala/blockchain"
+	"pala/network"
+	"pala/utils"
 	"strings"
 	"sync"
-	"thunder2/blockchain"
-	"thunder2/network"
-	"thunder2/utils"
 	"time"
 )
 

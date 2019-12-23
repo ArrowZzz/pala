@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	// Thunder imports
 )
 
 type domainInfo struct {

@@ -1,10 +1,10 @@
 package consensus
 
 import (
+	"pala/blockchain"
+	"pala/network"
+	"pala/utils"
 	"sync"
-	"thunder2/blockchain"
-	"thunder2/network"
-	"thunder2/utils"
 )
 
 // NetworkSimulator can simulate delaying messages or breaking connections.

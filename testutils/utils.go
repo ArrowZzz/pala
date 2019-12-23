@@ -1,10 +1,10 @@
 package testutils
 
 import (
-	"thunder2/blockchain"
-	"thunder2/consensus"
-	"thunder2/network"
-	"thunder2/utils"
+	"pala/blockchain"
+	"pala/consensus"
+	"pala/network"
+	"pala/utils"
 )
 
 type MediatorTestConfig struct {

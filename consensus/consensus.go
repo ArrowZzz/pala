@@ -8,11 +8,11 @@ package consensus
 
 import (
 	"fmt"
+	"pala/blockchain"
+	"pala/lgr"
+	"pala/network"
+	"pala/utils"
 	"sync"
-	"thunder2/blockchain"
-	"thunder2/lgr"
-	"thunder2/network"
-	"thunder2/utils"
 
 	"github.com/petar/GoLLRB/llrb"
 	"github.com/pkg/errors"

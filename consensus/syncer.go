@@ -1,7 +1,7 @@
 package consensus
 
 import (
-	"thunder2/blockchain"
+	"pala/blockchain"
 
 	"github.com/pkg/errors"
 )

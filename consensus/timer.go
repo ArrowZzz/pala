@@ -1,7 +1,7 @@
 package consensus
 
 import (
-	"thunder2/blockchain"
+	"pala/blockchain"
 	"time"
 )
 

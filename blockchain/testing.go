@@ -4,9 +4,9 @@ package blockchain
 import (
 	"fmt"
 	"math"
+	"pala/utils"
 	"sort"
 	"strings"
-	"thunder2/utils"
 	"time"
 
 	"github.com/pkg/errors"
@@ -123,9 +123,9 @@ func NewBlockChainFakeWithDelay(k uint32, delay time.Duration) (BlockChain, erro
 	sn := GetGenesisBlockSn()
 	genesis := NewBlockFake(sn, BlockSn{}, 0, nil, "0")
 	bc := BlockChainFake{
-		blocks:  make(map[BlockSn]Block),
-		genesis: genesis,
-		k:       k,
+		blocks:                                   make(map[BlockSn]Block),
+		genesis:                                  genesis,
+		k:                                        k,
 		freshestNotarizedChain:                   genesis,
 		freshestNotarizedChainUsingNotasInBlocks: genesis,
 		finalizedChain:                           genesis,
@@ -440,7 +440,7 @@ func (bc *BlockChainFake) insertBlock(b Block, fromOutside bool) error {
 			sn = b.GetBlockSn()
 		}
 		e := FinalizedChainExtendedEvent{
-			Sn: fc.GetBlockSn(),
+			Sn:                       fc.GetBlockSn(),
 			ReconfFinalizedByBlockSn: sn,
 		}
 		if fromOutside {

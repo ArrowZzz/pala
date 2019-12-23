@@ -3,8 +3,8 @@ package network_test
 
 import (
 	"fmt"
+	. "pala/network"
 	"testing"
-	. "thunder2/network"
 	"time"
 
 	"github.com/stretchr/testify/require"

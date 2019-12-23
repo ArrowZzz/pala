@@ -2,8 +2,8 @@ package network
 
 import (
 	"math/rand"
-	"thunder2/lgr"
-	"thunder2/utils"
+	"pala/lgr"
+	"pala/utils"
 	"time"
 
 	"github.com/pkg/errors"
