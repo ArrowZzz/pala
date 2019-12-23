@@ -50,7 +50,7 @@ The code has been tested on tested it on Fedora 29 and MacOS with go1.13.4
 ## Distributed Consensus in Practice
 To fill the gap between the academic paper and a working product, our developers
 discussed the details of [PaLa](https://eprint.iacr.org/2018/981) with Prof.
-Elaine Shi and came up with the [pseudocode](https://github.com/ArrowZzz/pala/blob/master/documents/doubly-pipelined-pala-pseudo-code.txt). The pseudo code is the
+Elaine Shi and came up with the [pseudocode](https://github.com/ArrowZzz/pala/blob/master/documents/doubly-pipelined-pala-pseudo-code.md). The pseudo code is the
 reference for this project and is a good starting point for understanding this
 beautiful consensus protocol.
 
@@ -71,7 +71,7 @@ to see the full design document.
 
 ## Supporting Documents
 
-* [Doubly Pipelined PaLa pseudocode](https://github.com/ArrowZzz/pala/blob/master/documents/doubly-pipelined-pala-pseudo-code.txt): understand how the consensus protocol
+* [Doubly Pipelined PaLa pseudocode](https://github.com/ArrowZzz/pala/blob/master/documents/doubly-pipelined-pala-pseudo-code.md): understand how the consensus protocol
   is implemented in practice.
 * [Terminology and data flow](https://docs.google.com/presentation/d/1vQ1Kh5O_kNXe0y0GK9c26UTmblPIdx8DDoKmPhrrr3c/edit?usp=sharing): understand how
   PaLa works via examples of different scenarios.
@@ -105,7 +105,7 @@ those fake objects by real, production implementations.
 
 ### Are there examples of how PaLa overcomes the difficult issues in distributed consensus?
 
-[TestLivenessAndDisasterRecovery](https://github.com/thundercore/pala/blob/master/src/thunder2/consensus_test/consensus_test.go#L92) is an example of recovering from data loss, and [TestVoterReconfiguration](https://github.com/thundercore/pala/blob/master/src/thunder2/consensus_test/consensus_test.go#L408) is another example of switching proposers when there are network hiccups.
+[TestLivenessAndDisasterRecovery](https://github.com/ArrowZzz/pala/blob/master/consensus_test/consensus_test.go#L92) is an example of recovering from data loss, and [TestVoterReconfiguration](https://github.com/ArrowZzz/pala/blob/master/consensus_test/consensus_test.go#L408) is another example of switching proposers when there are network hiccups.
 
 ### What's the suggested value for K (outstanding unnotarized proposals) in PaLa?
 K affects finality latency and throughput. When K is high, the finality latency
@@ -122,4 +122,4 @@ benchmark results below:
 * Test rounds: 5
 
 ## License
-[MIT](https://github.com/thundercore/pala/blob/master/LICENSE)
+[MIT](https://github.com/ArrowZzz/pala/blob/master/LICENSE)
