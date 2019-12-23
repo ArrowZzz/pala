@@ -1,8 +1,8 @@
 # go dep
-/pkg/
-/src/thunder2/vendor/
-/src/thunder2/Gopkg.dep
-/src/thunder2/Gopkg.lock
+pkg/
+vendor/
+Gopkg.dep
+Gopkg.lock
 
 # GNUmakefile customization
 /Local.mk
