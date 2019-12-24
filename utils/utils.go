@@ -115,6 +115,20 @@ func ConcatCopyPreAllocate(slices [][]byte) []byte {
 	return tmp
 }
 
+func Uint64ToBytes(n uint64) []byte {
+	var result [8]byte
+	binary.LittleEndian.PutUint64(result[:], n)
+	return result[:]
+}
+
+func BytesToUint64(bytes []byte) (uint64, []byte, error) {
+	if len(bytes) < 8 {
+		return 0, nil, errors.Errorf("len(bytes) = %d < 8", len(bytes))
+	}
+	v := binary.LittleEndian.Uint64(bytes)
+	return v, bytes[8:], nil
+}
+
 func Uint32ToBytes(n uint32) []byte {
 	var result [4]byte
 	binary.LittleEndian.PutUint32(result[:], n)
