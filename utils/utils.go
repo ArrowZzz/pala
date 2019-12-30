@@ -170,6 +170,14 @@ func BytesToString(bytes []byte) (string, []byte, error) {
 	return s, bytes[n:], nil
 }
 
+func DupMap(srcMap map[string]string) map[string]string {
+	dupMap := make(map[string]string)
+	for k, v := range srcMap {
+		dupMap[k] = v
+	}
+	return dupMap
+}
+
 //--------------------------------------------------------------------
 
 func NewTemporaryError(err error, temporary bool) error {
