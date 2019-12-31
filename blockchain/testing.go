@@ -13,6 +13,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var bootnodeIds []string
+
+func SetBootnodeIdsForTest(ids []string) {
+	bootnodeIds = ids
+}
+
 // About goroutine-safety:
 // * All public methods hold mutex by themselves.
 // * Most private methods assume the caller holds the mutex.
@@ -51,44 +57,6 @@ const (
 	useNotarizationInBlocks = useNotarization(2)
 )
 
-type BlockFake struct {
-	sn       BlockSn
-	parentSn BlockSn
-	nBlock   uint32
-	notas    []Notarization
-	body     string
-}
-
-type NotarizationFake struct {
-	sn       BlockSn
-	voterIds []string
-}
-
-// myProposerIds/myVoterIds are slices to make it possible to simulate key rotations
-// during reconfiguration.
-type VerifierFake struct {
-	mutex         utils.CheckedLock
-	myProposerIds []string          // my ids in the current or future proposers in proposerLists
-	myVoterIds    []string          // my ids in the current or future voters in voterLists
-	proposerLists []*ElectionResult // history of elected proposers
-	voterLists    []*ElectionResult // history of elected voters
-}
-
-type ProposalFake struct {
-	proposerId string
-	block      Block
-}
-
-type VoteFake struct {
-	sn      BlockSn
-	voterId string
-}
-
-type ClockMsgFake struct {
-	epoch   Epoch
-	voterId string
-}
-
 type ClockMsgNotaFake struct {
 	epoch    Epoch
 	voterIds []string
@@ -97,21 +65,70 @@ type ClockMsgNotaFake struct {
 type DataUnmarshallerFake struct {
 }
 
-// NOTE: Maybe we can move ElectionResult to blockchain.go
-// if it's easy to use for the real implementation.
-//
-// All data are immutable after being set.
-type ElectionResult struct {
-	consensusIds []string
-	// Included.
-	begin Epoch
-	// Included. Note that we don't know the number in the real implementation.
-	end Epoch
-}
-
 //--------------------------------------------------------------------
 
-var bootnodeIds []string
+type BlockFake struct {
+	sn       BlockSn
+	parentSn BlockSn
+	nBlock   uint32
+	notas    []Notarization
+	body     string
+}
+
+func NewBlockFake(sn BlockSn, parentSn BlockSn, nBlock uint32,
+	notas []Notarization, body string) Block {
+	return &BlockFake{
+		sn:       sn,
+		parentSn: parentSn,
+		nBlock:   nBlock,
+		notas:    notas,
+		body:     body,
+	}
+}
+
+func (b *BlockFake) ImplementsBlock() {
+}
+
+func (b *BlockFake) GetBlockSn() BlockSn { return b.sn }
+
+func (b *BlockFake) GetDebugString() string {
+	return fmt.Sprintf("block{%s, %d}", b.sn, len(b.notas))
+}
+
+func (b *BlockFake) GetParentBlockSn() BlockSn { return b.parentSn }
+
+func (b *BlockFake) GetHash() Hash { return Hash(b.sn.ToBytes()) }
+
+func (b *BlockFake) GetNumber() uint32 { return b.nBlock }
+
+func (b *BlockFake) GetNotarizations() []Notarization { return b.notas }
+
+func (b *BlockFake) GetBodyString() string { return b.body }
+
+func (b *BlockFake) Compare(other Block) int {
+	return b.GetBlockSn().Compare(other.GetBlockSn())
+}
+
+func (b *BlockFake) GetType() Type { return TypeBlock }
+
+func (b *BlockFake) GetBody() []byte {
+	var out [][]byte
+	// sn
+	out = append(out, b.sn.ToBytes())
+	// parent
+	out = append(out, b.GetParentBlockSn().ToBytes())
+	// nBlock
+	out = append(out, utils.Uint32ToBytes(b.GetNumber()))
+	// notas
+	out = append(out, utils.Uint16ToBytes(uint16(len(b.notas))))
+	for _, n := range b.notas {
+		out = append(out, n.GetBody())
+	}
+	// body
+	out = append(out, utils.Uint32ToBytes(uint32(len(b.body))))
+	out = append(out, []byte(b.body))
+	return utils.ConcatCopyPreAllocate(out)
+}
 
 //--------------------------------------------------------------------
 
@@ -719,6 +736,11 @@ func (bc *BlockChainFake) Reset() error {
 
 //--------------------------------------------------------------------
 
+type NotarizationFake struct {
+	sn       BlockSn
+	voterIds []string
+}
+
 func NewNotarizationFake(sn BlockSn, voterIds []string) Notarization {
 	tmp := make([]string, len(voterIds))
 	copy(tmp, voterIds)
@@ -726,36 +748,24 @@ func NewNotarizationFake(sn BlockSn, voterIds []string) Notarization {
 	return &NotarizationFake{sn, tmp}
 }
 
-func (n *NotarizationFake) GetBlockSn() BlockSn {
-	return n.sn
-}
+func (n *NotarizationFake) GetBlockSn() BlockSn { return n.sn }
 
 func (n *NotarizationFake) GetDebugString() string {
 	return fmt.Sprintf("nota{%s, %d}", n.sn, n.GetNVote())
 }
 
-func (n *NotarizationFake) Verify() bool {
-	return true
-}
+func (n *NotarizationFake) Verify() bool { return true }
 
 func (n *NotarizationFake) ImplementsNotarization() {
 }
 
-func (n *NotarizationFake) GetNVote() uint16 {
-	return uint16(len(n.voterIds))
-}
+func (n *NotarizationFake) GetNVote() uint16 { return uint16(len(n.voterIds)) }
 
-func (n *NotarizationFake) GetBlockHash() Hash {
-	return Hash(n.sn.ToBytes())
-}
+func (n *NotarizationFake) GetBlockHash() Hash { return Hash(n.sn.ToBytes()) }
 
-func (n *NotarizationFake) GetVoterIds() []string {
-	return n.voterIds
-}
+func (n *NotarizationFake) GetVoterIds() []string { return n.voterIds }
 
-func (n *NotarizationFake) GetType() Type {
-	return TypeNotarization
-}
+func (n *NotarizationFake) GetType() Type { return TypeNotarization }
 
 func (n *NotarizationFake) GetBody() []byte {
 	var out [][]byte
@@ -819,66 +829,6 @@ func (n *ClockMsgNotaFake) GetBody() []byte {
 
 //--------------------------------------------------------------------
 
-func (b *BlockFake) ImplementsBlock() {
-}
-
-func (b *BlockFake) GetBlockSn() BlockSn {
-	return b.sn
-}
-
-func (b *BlockFake) GetDebugString() string {
-	return fmt.Sprintf("block{%s, %d}", b.sn, len(b.notas))
-}
-
-func (b *BlockFake) GetParentBlockSn() BlockSn {
-	return b.parentSn
-}
-
-func (b *BlockFake) GetHash() Hash {
-	return Hash(b.sn.ToBytes())
-}
-
-func (b *BlockFake) GetNumber() uint32 {
-	return b.nBlock
-}
-
-func (b *BlockFake) GetNotarizations() []Notarization {
-	return b.notas
-}
-
-func (b *BlockFake) GetBodyString() string {
-	return b.body
-}
-
-func (b *BlockFake) Compare(other Block) int {
-	return b.GetBlockSn().Compare(other.GetBlockSn())
-}
-
-func (b *BlockFake) GetType() Type {
-	return TypeBlock
-}
-
-func (b *BlockFake) GetBody() []byte {
-	var out [][]byte
-	// sn
-	out = append(out, b.sn.ToBytes())
-	// parent
-	out = append(out, b.GetParentBlockSn().ToBytes())
-	// nBlock
-	out = append(out, utils.Uint32ToBytes(b.GetNumber()))
-	// notas
-	out = append(out, utils.Uint16ToBytes(uint16(len(b.notas))))
-	for _, n := range b.notas {
-		out = append(out, n.GetBody())
-	}
-	// body
-	out = append(out, utils.Uint32ToBytes(uint32(len(b.body))))
-	out = append(out, []byte(b.body))
-	return utils.ConcatCopyPreAllocate(out)
-}
-
-//--------------------------------------------------------------------
-
 // PrepareFakeChain adds blocks to the existing fake chain.
 // Assume using the stability-favoring approach.
 // k affects how to add the notarization in the block. For (e,s)
@@ -915,16 +865,6 @@ func PrepareFakeChain(
 		err := bc.InsertBlock(nb)
 		req.NoError(err)
 		p = nb
-	}
-}
-
-func NewBlockFake(sn BlockSn, parentSn BlockSn, nBlock uint32, notas []Notarization, body string) Block {
-	return &BlockFake{
-		sn:       sn,
-		parentSn: parentSn,
-		nBlock:   nBlock,
-		notas:    notas,
-		body:     body,
 	}
 }
 
@@ -969,8 +909,14 @@ func notarizationsToString(bc BlockChain, notas []Notarization) string {
 
 //--------------------------------------------------------------------
 
-func SetBootnodeIdsForTest(ids []string) {
-	bootnodeIds = ids
+// myProposerIds/myVoterIds are slices to make it possible to simulate key rotations
+// during reconfiguration.
+type VerifierFake struct {
+	mutex         utils.CheckedLock
+	myProposerIds []string          // my ids in the current or future proposers in proposerLists
+	myVoterIds    []string          // my ids in the current or future voters in voterLists
+	proposerLists []*ElectionResult // history of elected proposers
+	voterLists    []*ElectionResult // history of elected voters
 }
 
 func NewVerifierFake(
@@ -1228,6 +1174,11 @@ func (v *VerifierFake) doesIdExist(targetId string) bool {
 
 //--------------------------------------------------------------------
 
+type ProposalFake struct {
+	proposerId string
+	block      Block
+}
+
 func NewProposalFake(id string, b Block) Proposal {
 	return &ProposalFake{id, b}
 }
@@ -1235,25 +1186,17 @@ func NewProposalFake(id string, b Block) Proposal {
 func (p *ProposalFake) ImplementsProposal() {
 }
 
-func (p *ProposalFake) GetBlockSn() BlockSn {
-	return p.block.GetBlockSn()
-}
+func (p *ProposalFake) GetBlockSn() BlockSn { return p.block.GetBlockSn() }
 
 func (p *ProposalFake) GetDebugString() string {
 	return fmt.Sprintf("proposal{%s}", p.GetBlockSn())
 }
 
-func (p *ProposalFake) GetBlock() Block {
-	return p.block
-}
+func (p *ProposalFake) GetBlock() Block { return p.block }
 
-func (p *ProposalFake) GetProposerId() string {
-	return p.proposerId
-}
+func (p *ProposalFake) GetType() Type { return TypeProposal }
 
-func (p *ProposalFake) GetType() Type {
-	return TypeProposal
-}
+func (p *ProposalFake) GetProposerId() string { return p.proposerId }
 
 func (p *ProposalFake) GetBody() []byte {
 	bytes := utils.StringToBytes(p.proposerId)
@@ -1262,32 +1205,29 @@ func (p *ProposalFake) GetBody() []byte {
 
 //--------------------------------------------------------------------
 
-func NewVoteFake(sn BlockSn, id string) Vote {
-	return &VoteFake{sn, id}
+type VoteFake struct {
+	sn      BlockSn
+	voterId string
 }
+
+func NewVoteFake(sn BlockSn, id string) Vote { return &VoteFake{sn, id} }
 
 func (v *VoteFake) ImplementsVote() {
 }
 
-func (v *VoteFake) GetBlockSn() BlockSn {
-	return v.sn
-}
+func (v *VoteFake) GetBlockSn() BlockSn { return v.sn }
 
 func (v *VoteFake) GetDebugString() string {
 	return fmt.Sprintf("vote{%s}", v.sn)
 }
 
-func (v *VoteFake) GetType() Type {
-	return TypeVote
-}
+func (v *VoteFake) GetType() Type { return TypeVote }
 
 func (v *VoteFake) GetBody() []byte {
 	return append(v.sn.ToBytes(), utils.StringToBytes(v.voterId)...)
 }
 
-func (v *VoteFake) GetVoterId() string {
-	return v.voterId
-}
+func (v *VoteFake) GetVoterId() string { return v.voterId }
 
 func reverse(notas []Notarization) {
 	for i, j := 0, len(notas)-1; i < j; i, j = i+1, j-1 {
@@ -1299,33 +1239,30 @@ func reverse(notas []Notarization) {
 
 //--------------------------------------------------------------------
 
+type ClockMsgFake struct {
+	epoch   Epoch
+	voterId string
+}
+
 func (c *ClockMsgFake) ImplementsClockMsg() {
 }
 
 // A helper function for logging.
-func (c *ClockMsgFake) GetBlockSn() BlockSn {
-	return BlockSn{c.epoch, 1}
-}
+func (c *ClockMsgFake) GetBlockSn() BlockSn { return BlockSn{c.epoch, 1} }
 
-func (c *ClockMsgFake) GetEpoch() Epoch {
-	return c.epoch
-}
+func (c *ClockMsgFake) GetEpoch() Epoch { return c.epoch }
 
 func (c *ClockMsgFake) GetDebugString() string {
 	return fmt.Sprintf("clock{%d}", c.epoch)
 }
 
-func (c *ClockMsgFake) GetType() Type {
-	return TypeClockMsg
-}
+func (c *ClockMsgFake) GetType() Type { return TypeClockMsg }
 
 func (c *ClockMsgFake) GetBody() []byte {
 	return append(utils.Uint32ToBytes(uint32(c.epoch)), utils.StringToBytes(c.voterId)...)
 }
 
-func (c *ClockMsgFake) GetVoterId() string {
-	return c.voterId
-}
+func (c *ClockMsgFake) GetVoterId() string { return c.voterId }
 
 //--------------------------------------------------------------------
 
@@ -1457,6 +1394,18 @@ func (du *DataUnmarshallerFake) UnmarshalClockMsgNota(
 
 //--------------------------------------------------------------------
 
+// NOTE: Maybe we can move ElectionResult to blockchain.go
+// if it's easy to use for the real implementation.
+//
+// All data are immutable after being set.
+type ElectionResult struct {
+	consensusIds []string
+	// Included.
+	begin Epoch
+	// Included. Note that we don't know the number in the real implementation.
+	end Epoch
+}
+
 func NewElectionResult(consensusId []string, begin Epoch, end Epoch) ElectionResult {
 	return ElectionResult{consensusId, begin, end}
 }
@@ -1482,9 +1431,7 @@ func (t ElectionResult) IsNil() bool {
 	return (t.begin == 0 && t.end == 0) || t.begin > t.end
 }
 
-func (t ElectionResult) GetConsensusIds() []string {
-	return t.consensusIds
-}
+func (t ElectionResult) GetConsensusIds() []string { return t.consensusIds }
 
 func (t ElectionResult) String() string {
 	var b strings.Builder
