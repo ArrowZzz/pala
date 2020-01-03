@@ -1110,8 +1110,8 @@ func (v *VerifierFake) NewClockMsgNota(clocks []ClockMsg) (ClockMsgNota, error) 
 		return nil, errors.Errorf("not enough votes")
 	}
 	var voterIds []string
-	for _, v := range clocks {
-		voterIds = append(voterIds, v.GetVoterId())
+	for _, c := range clocks {
+		voterIds = append(voterIds, c.GetVoterId())
 	}
 	return NewClockMsgNotaFake(e, voterIds), nil
 }
