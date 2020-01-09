@@ -19,36 +19,6 @@ func SetBootnodeIdsForTest(ids []string) {
 	bootnodeIds = ids
 }
 
-// About goroutine-safety:
-// * All public methods hold mutex by themselves.
-// * Most private methods assume the caller holds the mutex.
-type BlockChainFake struct {
-	// Protect all data. All public methods hold the lock.
-	mutex utils.CheckedLock
-	// All data.
-	blocks  map[BlockSn]Block
-	genesis Block
-	// The last block of the freshest notarized chain.
-	freshestNotarizedChain                   Block
-	freshestNotarizedChainUsingNotasInBlocks Block
-	// The last block of the finalized chain.
-	finalizedChain Block
-	// The max number of unnotarized blocks. Also used as the finalized parameter.
-	k              uint32
-	eventChans     []chan interface{}
-	finalizedEvent *FinalizedChainExtendedEvent
-	// A helpful index.
-	notasInMemory map[BlockSn]Notarization
-	notasInBlocks map[BlockSn]Notarization
-	// The block number to reconfigure proposers/voters.
-	stopBlockNumber uint32
-	// Worker goroutine
-	isRunning bool
-	stopChan  chan chan error
-	notaChan  chan Notarization
-	delay     time.Duration
-}
-
 type useNotarization int
 
 const (
@@ -132,6 +102,105 @@ func (b *BlockFake) GetBody() []byte {
 
 //--------------------------------------------------------------------
 
+// About goroutine-safety:
+// * All public methods hold mutex by themselves.
+// * Most private methods assume the caller holds the mutex.
+type BlockChainFake struct {
+	// Protect all data. All public methods hold the lock.
+	mutex utils.CheckedLock
+	// All data.
+	blocks  map[BlockSn]Block
+	genesis Block
+	// The last block of the freshest notarized chain.
+	freshestNotarizedChain                   Block
+	freshestNotarizedChainUsingNotasInBlocks Block
+	// The last block of the finalized chain.
+	finalizedChain Block
+	// The max number of unnotarized blocks. Also used as the finalized parameter.
+	k              uint32
+	eventChans     []chan interface{}
+	finalizedEvent *FinalizedChainExtendedEvent
+	// A helpful index.
+	notasInMemory map[BlockSn]Notarization
+	notasInBlocks map[BlockSn]Notarization
+	// The block number to reconfigure proposers/voters.
+	stopBlockNumber uint32
+	// Worker goroutine
+	isRunning bool
+	stopChan  chan chan error
+	notaChan  chan Notarization
+	delay     time.Duration
+}
+
+func (bc *BlockChainFake) getBlock(s BlockSn) Block {
+	bc.mutex.CheckIsLocked("")
+
+	if b, ok := bc.blocks[s]; ok {
+		return b
+	}
+	return nil
+}
+
+func (bc *BlockChainFake) doesBlockExist(s BlockSn) bool {
+	bc.mutex.CheckIsLocked("")
+
+	// We should use a more efficient way to implement this in the real implementation.
+	return bc.getBlock(s) != nil
+}
+
+func (bc *BlockChainFake) getNotarization(s BlockSn) Notarization {
+	bc.mutex.CheckIsLocked("")
+
+	if n, ok := bc.notasInBlocks[s]; ok {
+		return n
+	}
+	if n, ok := bc.notasInMemory[s]; ok {
+		return n
+	}
+	return nil
+}
+
+func (bc *BlockChainFake) getFinalizedChain() Block {
+	bc.mutex.CheckIsLocked("")
+
+	return bc.finalizedChain
+}
+
+func (bc *BlockChainFake) ContainsBlock(s BlockSn) bool {
+	bc.mutex.Lock()
+	defer bc.mutex.Unlock()
+
+	return bc.doesBlockExist(s)
+}
+
+func (bc *BlockChainFake) GetBlock(s BlockSn) Block {
+	bc.mutex.Lock()
+	defer bc.mutex.Unlock()
+
+	return bc.getBlock(s)
+}
+
+func (bc *BlockChainFake) GetGenesisBlock() Block {
+	bc.mutex.Lock()
+	defer bc.mutex.Unlock()
+
+	return bc.genesis
+}
+
+func (bc *BlockChainFake) GetFinalizedChain() Block {
+	bc.mutex.Lock()
+	defer bc.mutex.Unlock()
+
+	return bc.getFinalizedChain()
+}
+
+func (bc *BlockChainFake) GetNotarization(s BlockSn) Notarization {
+	bc.mutex.Lock()
+	defer bc.mutex.Unlock()
+
+	return bc.getNotarization(s)
+}
+
 func NewBlockChainFake(k uint32) (BlockChain, error) {
 	return NewBlockChainFakeWithDelay(k, 0)
 }
@@ -157,62 +226,6 @@ func NewBlockChainFakeWithDelay(k uint32, delay time.Duration) (BlockChain, erro
 	} else {
 		return &bc, nil
 	}
-}
-
-func (bc *BlockChainFake) ContainsBlock(s BlockSn) bool {
-	bc.mutex.Lock()
-	defer bc.mutex.Unlock()
-
-	return bc.doesBlockExist(s)
-}
-
-func (bc *BlockChainFake) doesBlockExist(s BlockSn) bool {
-	bc.mutex.CheckIsLocked("")
-
-	// We should use a more efficient way to implement this in the real implementation.
-	return bc.getBlock(s) != nil
-}
-
-func (bc *BlockChainFake) GetBlock(s BlockSn) Block {
-	bc.mutex.Lock()
-	defer bc.mutex.Unlock()
-
-	return bc.getBlock(s)
-}
-
-func (bc *BlockChainFake) getBlock(s BlockSn) Block {
-	bc.mutex.CheckIsLocked("")
-
-	if b, ok := bc.blocks[s]; ok {
-		return b
-	}
-	return nil
-}
-
-func (bc *BlockChainFake) GetGenesisBlock() Block {
-	bc.mutex.Lock()
-	defer bc.mutex.Unlock()
-
-	return bc.genesis
-}
-
-func (bc *BlockChainFake) GetNotarization(s BlockSn) Notarization {
-	bc.mutex.Lock()
-	defer bc.mutex.Unlock()
-
-	return bc.getNotarization(s)
-}
-
-func (bc *BlockChainFake) getNotarization(s BlockSn) Notarization {
-	bc.mutex.CheckIsLocked("")
-
-	if n, ok := bc.notasInBlocks[s]; ok {
-		return n
-	}
-	if n, ok := bc.notasInMemory[s]; ok {
-		return n
-	}
-	return nil
 }
 
 func (bc *BlockChainFake) GetLongestChain() Block {
@@ -246,19 +259,6 @@ func (bc *BlockChainFake) ComputeFreshestNotarizedChain() Block {
 
 func (bc *BlockChainFake) computeFreshestNotarizedChain() Block {
 	return bc.getLongestChain(useNotarizationInAll)
-}
-
-func (bc *BlockChainFake) GetFinalizedChain() Block {
-	bc.mutex.Lock()
-	defer bc.mutex.Unlock()
-
-	return bc.getFinalizedChain()
-}
-
-func (bc *BlockChainFake) getFinalizedChain() Block {
-	bc.mutex.CheckIsLocked("")
-
-	return bc.finalizedChain
 }
 
 // ComputeFinalizedChain is the baseline for correctness.
@@ -321,21 +321,18 @@ func (bc *BlockChainFake) getDepth(
 	s BlockSn, depths map[BlockSn]int, useNota useNotarization) int {
 	bc.mutex.CheckIsLocked("")
 
-	if useNota != useNotarizationNone {
-		if s.IsGenesis() {
-			// There is no notarization of the genesis block. No check.
+	if useNota != useNotarizationNone && !s.IsGenesis() {
+		// There is no notarization of the genesis block. No check.
+		var nota Notarization
+		if useNota == useNotarizationInAll {
+			nota = bc.getNotarization(s)
 		} else {
-			var nota Notarization
-			if useNota == useNotarizationInAll {
-				nota = bc.getNotarization(s)
-			} else {
-				if n, ok := bc.notasInBlocks[s]; ok {
-					nota = n
-				}
+			if n, ok := bc.notasInBlocks[s]; ok {
+				nota = n
 			}
-			if nota == nil {
-				return -1
-			}
+		}
+		if nota == nil {
+			return -1
 		}
 	}
 
