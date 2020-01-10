@@ -132,6 +132,10 @@ type BlockChainFake struct {
 	delay     time.Duration
 }
 
+func getParentBlock(bc *BlockChainFake, b Block) Block {
+	return bc.getBlock(b.GetParentBlockSn())
+}
+
 func (bc *BlockChainFake) getBlock(s BlockSn) Block {
 	bc.mutex.CheckIsLocked("")
 
@@ -146,24 +150,6 @@ func (bc *BlockChainFake) doesBlockExist(s BlockSn) bool {
 
 	// We should use a more efficient way to implement this in the real implementation.
 	return bc.getBlock(s) != nil
-}
-
-func (bc *BlockChainFake) getNotarization(s BlockSn) Notarization {
-	bc.mutex.CheckIsLocked("")
-
-	if n, ok := bc.notasInBlocks[s]; ok {
-		return n
-	}
-	if n, ok := bc.notasInMemory[s]; ok {
-		return n
-	}
-	return nil
-}
-
-func (bc *BlockChainFake) getFinalizedChain() Block {
-	bc.mutex.CheckIsLocked("")
-
-	return bc.finalizedChain
 }
 
 func (bc *BlockChainFake) ContainsBlock(s BlockSn) bool {
@@ -194,6 +180,12 @@ func (bc *BlockChainFake) GetFinalizedChain() Block {
 	return bc.getFinalizedChain()
 }
 
+func (bc *BlockChainFake) getFinalizedChain() Block {
+	bc.mutex.CheckIsLocked("")
+
+	return bc.finalizedChain
+}
+
 func (bc *BlockChainFake) GetNotarization(s BlockSn) Notarization {
 	bc.mutex.Lock()
 	defer bc.mutex.Unlock()
@@ -201,31 +193,16 @@ func (bc *BlockChainFake) GetNotarization(s BlockSn) Notarization {
 	return bc.getNotarization(s)
 }
 
-func NewBlockChainFake(k uint32) (BlockChain, error) {
-	return NewBlockChainFakeWithDelay(k, 0)
-}
+func (bc *BlockChainFake) getNotarization(s BlockSn) Notarization {
+	bc.mutex.CheckIsLocked("")
 
-func NewBlockChainFakeWithDelay(k uint32, delay time.Duration) (BlockChain, error) {
-	sn := GetGenesisBlockSn()
-	genesis := NewBlockFake(sn, BlockSn{}, 0, nil, "0")
-	bc := BlockChainFake{
-		blocks:                                   make(map[BlockSn]Block),
-		genesis:                                  genesis,
-		k:                                        k,
-		freshestNotarizedChain:                   genesis,
-		freshestNotarizedChainUsingNotasInBlocks: genesis,
-		finalizedChain:                           genesis,
-		notasInMemory:                            make(map[BlockSn]Notarization),
-		notasInBlocks:                            make(map[BlockSn]Notarization),
-		stopChan:                                 make(chan chan error),
-		notaChan:                                 make(chan Notarization, 1024),
-		delay:                                    delay,
+	if n, ok := bc.notasInBlocks[s]; ok {
+		return n
 	}
-	if err := bc.InsertBlock(genesis); err != nil {
-		return nil, err
-	} else {
-		return &bc, nil
+	if n, ok := bc.notasInMemory[s]; ok {
+		return n
 	}
+	return nil
 }
 
 func (bc *BlockChainFake) GetLongestChain() Block {
@@ -233,62 +210,6 @@ func (bc *BlockChainFake) GetLongestChain() Block {
 	defer bc.mutex.Unlock()
 
 	return bc.getLongestChain(useNotarizationNone)
-}
-
-func (bc *BlockChainFake) GetFreshestNotarizedChain() Block {
-	bc.mutex.Lock()
-	defer bc.mutex.Unlock()
-
-	return bc.getFreshestNotarizedChain()
-}
-
-// Assume blocks and notarizations are inserted in order.
-// The time complexity is O(1).
-func (bc *BlockChainFake) getFreshestNotarizedChain() Block {
-	return bc.freshestNotarizedChain
-}
-
-// ComputeFreshestNotarizedChain is the baseline for correctness.
-// The time complexity is O(N).
-func (bc *BlockChainFake) ComputeFreshestNotarizedChain() Block {
-	bc.mutex.Lock()
-	defer bc.mutex.Unlock()
-
-	return bc.computeFreshestNotarizedChain()
-}
-
-func (bc *BlockChainFake) computeFreshestNotarizedChain() Block {
-	return bc.getLongestChain(useNotarizationInAll)
-}
-
-// ComputeFinalizedChain is the baseline for correctness.
-// The time complexity is O(N).
-func (bc *BlockChainFake) ComputeFinalizedChain() Block {
-	bc.mutex.Lock()
-	defer bc.mutex.Unlock()
-
-	return bc.computeFinalizedChain()
-}
-
-func (bc *BlockChainFake) computeFinalizedChain() Block {
-	bc.mutex.CheckIsLocked("")
-
-	b := bc.computeFinalizingChain()
-	sn := b.GetBlockSn()
-	// Ensure there are k normal blocks after the finalizing block.
-	if !(sn.S > bc.k && bc.doesBlockExist(BlockSn{sn.Epoch, sn.S + bc.k})) ||
-		sn.IsGenesis() {
-		return bc.genesis
-	}
-	// Chop off the last k normal blocks.
-	return bc.getBlock(BlockSn{sn.Epoch, sn.S - bc.k})
-}
-
-// Return the last block of the freshest notarized chain only using notarizations in blocks.
-func (bc *BlockChainFake) computeFinalizingChain() Block {
-	bc.mutex.CheckIsLocked("")
-
-	return bc.getLongestChain(useNotarizationInBlocks)
 }
 
 // If useNota is useNotarizationNone, return the last block of the longest chain.
@@ -307,11 +228,9 @@ func (bc *BlockChainFake) getLongestChain(useNota useNotarization) Block {
 			if t > 0 && ms.Compare(s) < 0 {
 				ms = s
 			}
-		} else {
-			if md < t {
-				md = t
-				ms = s
-			}
+		} else if md < t {
+			md = t
+			ms = s
 		}
 	}
 	return bc.blocks[ms]
@@ -351,6 +270,89 @@ func (bc *BlockChainFake) getDepth(
 			depths[s] = 1
 		}
 		return depths[s]
+	}
+}
+
+// ComputeFreshestNotarizedChain is the baseline for correctness.
+// The time complexity is O(N).
+func (bc *BlockChainFake) ComputeFreshestNotarizedChain() Block {
+	bc.mutex.Lock()
+	defer bc.mutex.Unlock()
+
+	return bc.computeFreshestNotarizedChain()
+}
+
+func (bc *BlockChainFake) computeFreshestNotarizedChain() Block {
+	return bc.getLongestChain(useNotarizationInAll)
+}
+
+func (bc *BlockChainFake) GetFreshestNotarizedChain() Block {
+	bc.mutex.Lock()
+	defer bc.mutex.Unlock()
+
+	return bc.getFreshestNotarizedChain()
+}
+
+// Assume blocks and notarizations are inserted in order.
+// The time complexity is O(1).
+func (bc *BlockChainFake) getFreshestNotarizedChain() Block {
+	return bc.freshestNotarizedChain
+}
+
+// ComputeFinalizedChain is the baseline for correctness.
+// The time complexity is O(N).
+func (bc *BlockChainFake) ComputeFinalizedChain() Block {
+	bc.mutex.Lock()
+	defer bc.mutex.Unlock()
+
+	return bc.computeFinalizedChain()
+}
+
+func (bc *BlockChainFake) computeFinalizedChain() Block {
+	bc.mutex.CheckIsLocked("")
+
+	b := bc.computeFinalizingChain()
+	sn := b.GetBlockSn()
+	// Ensure there are k normal blocks after the finalizing block.
+	if !(sn.S > bc.k && bc.doesBlockExist(BlockSn{sn.Epoch, sn.S + bc.k})) ||
+		sn.IsGenesis() {
+		return bc.genesis
+	}
+	// Chop off the last k normal blocks.
+	return bc.getBlock(BlockSn{sn.Epoch, sn.S - bc.k})
+}
+
+// Return the last block of the freshest notarized chain only using notarizations in blocks.
+func (bc *BlockChainFake) computeFinalizingChain() Block {
+	bc.mutex.CheckIsLocked("")
+
+	return bc.getLongestChain(useNotarizationInBlocks)
+}
+
+func NewBlockChainFake(k uint32) (BlockChain, error) {
+	return NewBlockChainFakeWithDelay(k, 0)
+}
+
+func NewBlockChainFakeWithDelay(k uint32, delay time.Duration) (BlockChain, error) {
+	sn := GetGenesisBlockSn()
+	genesis := NewBlockFake(sn, BlockSn{}, 0, nil, "0")
+	bc := BlockChainFake{
+		blocks:                                   make(map[BlockSn]Block),
+		genesis:                                  genesis,
+		k:                                        k,
+		freshestNotarizedChain:                   genesis,
+		freshestNotarizedChainUsingNotasInBlocks: genesis,
+		finalizedChain:                           genesis,
+		notasInMemory:                            make(map[BlockSn]Notarization),
+		notasInBlocks:                            make(map[BlockSn]Notarization),
+		stopChan:                                 make(chan chan error),
+		notaChan:                                 make(chan Notarization, 1024),
+		delay:                                    delay,
+	}
+	if err := bc.InsertBlock(genesis); err != nil {
+		return nil, err
+	} else {
+		return &bc, nil
 	}
 }
 
@@ -596,10 +598,6 @@ func (bc *BlockChainFake) getNotarizations(b Block, k int) []Notarization {
 	}
 	reverse(notas)
 	return notas
-}
-
-func getParentBlock(bc *BlockChainFake, b Block) Block {
-	return bc.getBlock(b.GetParentBlockSn())
 }
 
 // Stop the creation. However, there may be some blocks in the returned channel
