@@ -320,21 +320,17 @@ func (s BlockSn) IsNil() bool {
 }
 
 func (s BlockSn) Compare(s2 BlockSn) int {
-	if s.Epoch != s2.Epoch {
-		if s.Epoch < s2.Epoch {
-			return -1
-		} else {
-			return 1
-		}
+	if s.Epoch > s2.Epoch {
+		return 1
+	} else if s.Epoch < s2.Epoch {
+		return -1
+	} else if s.S > s2.S {
+		return 1
+	} else if s.S < s2.S {
+		return -1
+	} else {
+		return 0
 	}
-	if s.S != s2.S {
-		if s.S < s2.S {
-			return -1
-		} else {
-			return 1
-		}
-	}
-	return 0
 }
 
 func (s BlockSn) GetBlockSn() BlockSn {

@@ -329,34 +329,8 @@ func (bc *BlockChainFake) computeFinalizingChain() Block {
 	return bc.getLongestChain(useNotarizationInBlocks)
 }
 
-func NewBlockChainFake(k uint32) (BlockChain, error) {
-	return NewBlockChainFakeWithDelay(k, 0)
-}
-
-func NewBlockChainFakeWithDelay(k uint32, delay time.Duration) (BlockChain, error) {
-	sn := GetGenesisBlockSn()
-	genesis := NewBlockFake(sn, BlockSn{}, 0, nil, "0")
-	bc := BlockChainFake{
-		blocks:                                   make(map[BlockSn]Block),
-		genesis:                                  genesis,
-		k:                                        k,
-		freshestNotarizedChain:                   genesis,
-		freshestNotarizedChainUsingNotasInBlocks: genesis,
-		finalizedChain:                           genesis,
-		notasInMemory:                            make(map[BlockSn]Notarization),
-		notasInBlocks:                            make(map[BlockSn]Notarization),
-		stopChan:                                 make(chan chan error),
-		notaChan:                                 make(chan Notarization, 1024),
-		delay:                                    delay,
-	}
-	if err := bc.InsertBlock(genesis); err != nil {
-		return nil, err
-	} else {
-		return &bc, nil
-	}
-}
-
-// TODO(thunder): reject b if it is not extended from b.finalizedChain.
+// TODO: in production system, we should reject b if it is not extended from
+// b.finalizedChain.
 // Exception: b is the first block of this session,
 // and its parent is the stop block in the last session.
 func (bc *BlockChainFake) InsertBlock(b Block) error {
@@ -443,13 +417,12 @@ func (bc *BlockChainFake) insertBlock(b Block, fromOutside bool) error {
 	bc.freshestNotarizedChainUsingNotasInBlocks = bc.getBlock(fncSn)
 
 	// Update finalized chain.
-	candidateSn := bc.freshestNotarizedChainUsingNotasInBlocks.GetBlockSn()
-	if candidateSn.S < bc.k+1 {
+	if fncSn.S < bc.k+1 {
 		return nil
 	}
-	candidateSn.S -= bc.k
-	if bc.finalizedChain.GetBlockSn().Compare(candidateSn) < 0 {
-		bc.finalizedChain = bc.getBlock(candidateSn)
+	fncSn.S -= bc.k
+	if bc.finalizedChain.GetBlockSn().Compare(fncSn) < 0 {
+		bc.finalizedChain = bc.getBlock(fncSn)
 		fc := bc.finalizedChain
 		var sn BlockSn
 		if bc.stopBlockNumber == fc.GetNumber() {
@@ -466,8 +439,78 @@ func (bc *BlockChainFake) insertBlock(b Block, fromOutside bool) error {
 			bc.finalizedEvent = &e
 		}
 	}
-
 	return nil
+}
+
+func (bc *BlockChainFake) AddNotarization(n Notarization) error {
+	bc.mutex.Lock()
+	defer bc.mutex.Unlock()
+
+	return bc.addNotarization(n)
+}
+
+func (bc *BlockChainFake) addNotarization(n Notarization) error {
+	bc.mutex.CheckIsLocked("")
+
+	if oldNota := bc.getNotarization(n.GetBlockSn()); oldNota != nil {
+		// Collect the late votes.
+		if oldNota.GetNVote() < n.GetNVote() {
+			bc.notasInMemory[n.GetBlockSn()] = n
+		}
+		return nil
+	}
+
+	// Allow adding the notarization only if the parent block and notarization exist.
+	// This constraint simplifies the implementation of maintaining the freshest notarized chain.
+	sn := n.GetBlockSn()
+	fnc := bc.getBlock(sn)
+	if fnc == nil {
+		return errors.Errorf("add notarization %s but the corresponding block does not exist", sn)
+	}
+	parentSn := fnc.GetParentBlockSn()
+	if !parentSn.IsGenesis() && bc.getNotarization(parentSn) == nil {
+		return errors.Errorf("%s's parent notarization %s does not exist", sn, parentSn)
+	}
+
+	bc.notasInMemory[sn] = n
+	if bc.isRunning {
+		// The work goroutine is running. Notify it there is a new notarization.
+		bc.notaChan <- n
+	}
+
+	if fnc.Compare(bc.freshestNotarizedChain) > 0 {
+		bc.freshestNotarizedChain = fnc
+		bc.notifyEvent(
+			FreshestNotarizedChainExtendedEvent{fnc.GetBlockSn()})
+	}
+	return nil
+}
+
+func NewBlockChainFake(k uint32) (BlockChain, error) {
+	return NewBlockChainFakeWithDelay(k, 0)
+}
+
+func NewBlockChainFakeWithDelay(k uint32, delay time.Duration) (BlockChain, error) {
+	sn := GetGenesisBlockSn()
+	genesis := NewBlockFake(sn, BlockSn{}, 0, nil, "0")
+	bc := BlockChainFake{
+		blocks:                                   make(map[BlockSn]Block),
+		genesis:                                  genesis,
+		k:                                        k,
+		freshestNotarizedChain:                   genesis,
+		freshestNotarizedChainUsingNotasInBlocks: genesis,
+		finalizedChain:                           genesis,
+		notasInMemory:                            make(map[BlockSn]Notarization),
+		notasInBlocks:                            make(map[BlockSn]Notarization),
+		stopChan:                                 make(chan chan error),
+		notaChan:                                 make(chan Notarization, 1024),
+		delay:                                    delay,
+	}
+	if err := bc.InsertBlock(genesis); err != nil {
+		return nil, err
+	} else {
+		return &bc, nil
+	}
 }
 
 func (bc *BlockChainFake) StartCreatingNewBlocks(epoch Epoch) (chan BlockAndEvent, error) {
@@ -633,50 +676,6 @@ func (bc *BlockChainFake) IsCreatingBlock() bool {
 	defer bc.mutex.Unlock()
 
 	return bc.isRunning
-}
-
-func (bc *BlockChainFake) AddNotarization(n Notarization) error {
-	bc.mutex.Lock()
-	defer bc.mutex.Unlock()
-
-	return bc.addNotarization(n)
-}
-
-func (bc *BlockChainFake) addNotarization(n Notarization) error {
-	bc.mutex.CheckIsLocked("")
-
-	if oldNota := bc.getNotarization(n.GetBlockSn()); oldNota != nil {
-		// Collect the late votes.
-		if oldNota.GetNVote() < n.GetNVote() {
-			bc.notasInMemory[n.GetBlockSn()] = n
-		}
-		return nil
-	}
-
-	// Allow adding the notarization only if the parent block and notarization exist.
-	// This constraint simplifies the implementation of maintaining the freshest notarized chain.
-	sn := n.GetBlockSn()
-	fnc := bc.getBlock(sn)
-	if fnc == nil {
-		return errors.Errorf("add notarization %s but the corresponding block does not exist", sn)
-	}
-	parentSn := fnc.GetParentBlockSn()
-	if !parentSn.IsGenesis() && bc.getNotarization(parentSn) == nil {
-		return errors.Errorf("%s's parent notarization %s does not exist", sn, parentSn)
-	}
-
-	bc.notasInMemory[sn] = n
-	if bc.isRunning {
-		// The work goroutine is running. Notify it there is a new notarization.
-		bc.notaChan <- n
-	}
-
-	if fnc.Compare(bc.freshestNotarizedChain) > 0 {
-		bc.freshestNotarizedChain = fnc
-		bc.notifyEvent(
-			FreshestNotarizedChainExtendedEvent{fnc.GetBlockSn()})
-	}
-	return nil
 }
 
 func (bc *BlockChainFake) notifyEvent(e interface{}) {
