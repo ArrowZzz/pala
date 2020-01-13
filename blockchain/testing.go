@@ -486,33 +486,6 @@ func (bc *BlockChainFake) addNotarization(n Notarization) error {
 	return nil
 }
 
-func NewBlockChainFake(k uint32) (BlockChain, error) {
-	return NewBlockChainFakeWithDelay(k, 0)
-}
-
-func NewBlockChainFakeWithDelay(k uint32, delay time.Duration) (BlockChain, error) {
-	sn := GetGenesisBlockSn()
-	genesis := NewBlockFake(sn, BlockSn{}, 0, nil, "0")
-	bc := BlockChainFake{
-		blocks:                                   make(map[BlockSn]Block),
-		genesis:                                  genesis,
-		k:                                        k,
-		freshestNotarizedChain:                   genesis,
-		freshestNotarizedChainUsingNotasInBlocks: genesis,
-		finalizedChain:                           genesis,
-		notasInMemory:                            make(map[BlockSn]Notarization),
-		notasInBlocks:                            make(map[BlockSn]Notarization),
-		stopChan:                                 make(chan chan error),
-		notaChan:                                 make(chan Notarization, 1024),
-		delay:                                    delay,
-	}
-	if err := bc.InsertBlock(genesis); err != nil {
-		return nil, err
-	} else {
-		return &bc, nil
-	}
-}
-
 func (bc *BlockChainFake) StartCreatingNewBlocks(epoch Epoch) (chan BlockAndEvent, error) {
 	bc.mutex.Lock()
 	defer bc.mutex.Unlock()
@@ -529,10 +502,8 @@ func (bc *BlockChainFake) StartCreatingNewBlocks(epoch Epoch) (chan BlockAndEven
 		return nil, errors.Errorf("Parent %s does not exist", parentSn)
 	}
 	nota := bc.getNotarization(parentSn)
-	if nota == nil {
-		if !parentSn.IsGenesis() {
-			return nil, errors.Errorf("Parent %s is not notarized", parentSn)
-		}
+	if nota == nil && !parentSn.IsGenesis() {
+		return nil, errors.Errorf("Parent %s is not notarized", parentSn)
 	}
 	ch := make(chan BlockAndEvent, bc.k)
 	bc.isRunning = true
@@ -641,6 +612,33 @@ func (bc *BlockChainFake) getNotarizations(b Block, k int) []Notarization {
 	}
 	reverse(notas)
 	return notas
+}
+
+func NewBlockChainFake(k uint32) (BlockChain, error) {
+	return NewBlockChainFakeWithDelay(k, 0)
+}
+
+func NewBlockChainFakeWithDelay(k uint32, delay time.Duration) (BlockChain, error) {
+	sn := GetGenesisBlockSn()
+	genesis := NewBlockFake(sn, BlockSn{}, 0, nil, "0")
+	bc := BlockChainFake{
+		blocks:                                   make(map[BlockSn]Block),
+		genesis:                                  genesis,
+		k:                                        k,
+		freshestNotarizedChain:                   genesis,
+		freshestNotarizedChainUsingNotasInBlocks: genesis,
+		finalizedChain:                           genesis,
+		notasInMemory:                            make(map[BlockSn]Notarization),
+		notasInBlocks:                            make(map[BlockSn]Notarization),
+		stopChan:                                 make(chan chan error),
+		notaChan:                                 make(chan Notarization, 1024),
+		delay:                                    delay,
+	}
+	if err := bc.InsertBlock(genesis); err != nil {
+		return nil, err
+	} else {
+		return &bc, nil
+	}
 }
 
 // Stop the creation. However, there may be some blocks in the returned channel
