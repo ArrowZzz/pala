@@ -614,33 +614,6 @@ func (bc *BlockChainFake) getNotarizations(b Block, k int) []Notarization {
 	return notas
 }
 
-func NewBlockChainFake(k uint32) (BlockChain, error) {
-	return NewBlockChainFakeWithDelay(k, 0)
-}
-
-func NewBlockChainFakeWithDelay(k uint32, delay time.Duration) (BlockChain, error) {
-	sn := GetGenesisBlockSn()
-	genesis := NewBlockFake(sn, BlockSn{}, 0, nil, "0")
-	bc := BlockChainFake{
-		blocks:                                   make(map[BlockSn]Block),
-		genesis:                                  genesis,
-		k:                                        k,
-		freshestNotarizedChain:                   genesis,
-		freshestNotarizedChainUsingNotasInBlocks: genesis,
-		finalizedChain:                           genesis,
-		notasInMemory:                            make(map[BlockSn]Notarization),
-		notasInBlocks:                            make(map[BlockSn]Notarization),
-		stopChan:                                 make(chan chan error),
-		notaChan:                                 make(chan Notarization, 1024),
-		delay:                                    delay,
-	}
-	if err := bc.InsertBlock(genesis); err != nil {
-		return nil, err
-	} else {
-		return &bc, nil
-	}
-}
-
 // Stop the creation. However, there may be some blocks in the returned channel
 // by StartCreatingNewBlocks().
 func (bc *BlockChainFake) StopCreatingNewBlocks() error {
@@ -724,6 +697,33 @@ func (bc *BlockChainFake) Reset() error {
 	bc.stopBlockNumber = 0
 
 	return bc.insertBlock(bc.genesis, false)
+}
+
+func NewBlockChainFake(k uint32) (BlockChain, error) {
+	return NewBlockChainFakeWithDelay(k, 0)
+}
+
+func NewBlockChainFakeWithDelay(k uint32, delay time.Duration) (BlockChain, error) {
+	sn := GetGenesisBlockSn()
+	genesis := NewBlockFake(sn, BlockSn{}, 0, nil, "0")
+	bc := BlockChainFake{
+		blocks:                                   make(map[BlockSn]Block),
+		genesis:                                  genesis,
+		k:                                        k,
+		freshestNotarizedChain:                   genesis,
+		freshestNotarizedChainUsingNotasInBlocks: genesis,
+		finalizedChain:                           genesis,
+		notasInMemory:                            make(map[BlockSn]Notarization),
+		notasInBlocks:                            make(map[BlockSn]Notarization),
+		stopChan:                                 make(chan chan error),
+		notaChan:                                 make(chan Notarization, 1024),
+		delay:                                    delay,
+	}
+	if err := bc.InsertBlock(genesis); err != nil {
+		return nil, err
+	} else {
+		return &bc, nil
+	}
 }
 
 //--------------------------------------------------------------------

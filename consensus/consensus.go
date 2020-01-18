@@ -127,7 +127,7 @@ type RoleAssigner interface {
 	// IsProposer returns true if |id| is a proposer at |epoch|.
 	// If |id| is an empty string, it means asking whether itself is a proposer.
 	IsProposer(id string, epoch blockchain.Epoch) bool
-	// IsProposer returns true if |id| is the primary proposer at |epoch|.
+	// IsPrimaryProposer returns true if |id| is the primary proposer at |epoch|.
 	// If |id| is an empty string, it means asking whether itself is a proposer.
 	IsPrimaryProposer(id string, epoch blockchain.Epoch) bool
 	// IsVoter returns true if |id| is a voter at |epoch|.
@@ -145,7 +145,7 @@ type RoleAssigner interface {
 	GetBootnodeId() string
 	// GetDefaultProposerId() returns the default proposer id.
 	GetDefaultProposerId() string
-	// GetDefaultProposerId() returns the default voter id.
+	// GetDefaultVoterId() returns the default voter id.
 	GetDefaultVoterId() string
 	// GetNumVoters returns the number of voters at |epoch|.
 	GetNumVoters(epoch blockchain.Epoch) int
