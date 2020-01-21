@@ -945,6 +945,11 @@ func (v *VerifierFake) VerifyProposal(p Proposal) error {
 	v.mutex.Lock()
 	defer v.mutex.Unlock()
 
+	b := p.GetBlock()
+	if b == nil {
+		return errors.Errorf("invalid proposal %s: no block", p.GetBlockSn())
+	}
+
 	proposerIds := v.findProposers(p.GetBlockSn().Epoch)
 	for _, pid := range proposerIds {
 		if pid == p.GetProposerId() {
@@ -1013,7 +1018,8 @@ func (v *VerifierFake) Notarize(votes []Vote) (Notarization, error) {
 
 	for i := 1; i < len(votes); i++ {
 		if votes[i].GetBlockSn() != votes[0].GetBlockSn() {
-			return nil, errors.Errorf("votes have different block sequence number")
+			utils.Bug("Notarization has different block epochs in vote %s"+
+				" and vote %s", votes[i].GetBlockSn(), votes[0].GetBlockSn())
 		}
 	}
 
@@ -1092,7 +1098,8 @@ func (v *VerifierFake) NewClockMsgNota(clocks []ClockMsg) (ClockMsgNota, error) 
 
 	for i := 1; i < len(clocks); i++ {
 		if clocks[i].GetEpoch() != clocks[0].GetEpoch() {
-			return nil, errors.Errorf("clocks have different epoch")
+			utils.Bug("Clock messages have different epochs: %x vs %x",
+				clocks[i].GetEpoch(), clocks[0].GetEpoch())
 		}
 	}
 

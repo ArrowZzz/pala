@@ -26,6 +26,10 @@ clean-dep:
 lint:
 	golangci-lint run 2>golangci-lint.log
 
+.PHONY: vet
+vet:
+	$(GO) vet $(PALA_PKGS)	
+
 .PHONY: clean
 clean:
 	rm -rf pkg/

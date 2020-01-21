@@ -28,15 +28,66 @@ const (
 	RoleVoter    = Role(1 << 2)
 )
 
-type NodeConfig struct {
-	LoggingId  string
-	K          uint32 // The outstanding window
-	Chain      blockchain.BlockChain
-	NodeClient NodeClient
-	Role       RoleAssigner
-	Verifier   blockchain.Verifier
-	Epoch      blockchain.Epoch
-	Timer      Timer
+type BlockCreator int
+
+const (
+	BlockCreatedByOther = BlockCreator(0)
+	BlockCreatedBySelf  = BlockCreator(1)
+)
+
+type work struct {
+	// The main data.
+	blob interface{}
+	// The aux data for blob
+	context interface{}
+	// Return the result via ch
+	ch chan error
+}
+
+type notarizedBlock struct {
+	notarization blockchain.Notarization
+	block        blockchain.Block
+}
+
+type proposalContext struct {
+	source  *network.Message
+	creator BlockCreator
+}
+
+// The item used with the ordered map (LLRB).
+type Item struct {
+	key   blockchain.BlockSn
+	value interface{}
+}
+
+// A node can have multiple roles. When doing the proposer/voter reconfiguration,
+// need |id| to determine whether to establish/drop the connection.
+type RoleAssigner interface {
+	// IsProposer returns true if |id| is a proposer at |epoch|.
+	// If |id| is an empty string, it means asking whether itself is a proposer.
+	IsProposer(id string, epoch blockchain.Epoch) bool
+	// IsPrimaryProposer returns true if |id| is the primary proposer at |epoch|.
+	// If |id| is an empty string, it means asking whether itself is a proposer.
+	IsPrimaryProposer(id string, epoch blockchain.Epoch) bool
+	// IsVoter returns true if |id| is a voter at |epoch|.
+	// If |id| is an empty string, it means asking whether itself is a voter.
+	IsVoter(id string, epoch blockchain.Epoch) bool
+	// IsBootnode() returns true if |id| is a bootnode. Bootnodes are special nodes assigned
+	// in the configurations/code without a term of office.
+	// If |id| is an empty string, it means asking whether itself is a bootnode.
+	IsBootnode(id string) bool
+	// GetProposerId returns the proposer id at |epoch| or an empty string.
+	GetProposerId(epoch blockchain.Epoch) string
+	// GetVoterId returns the voter id at |epoch| or an empty string.
+	GetVoterId(epoch blockchain.Epoch) string
+	// GetBootnodeId returns the bootnode id or an empty string.
+	GetBootnodeId() string
+	// GetDefaultProposerId() returns the default proposer id.
+	GetDefaultProposerId() string
+	// GetDefaultVoterId() returns the default voter id.
+	GetDefaultVoterId() string
+	// GetNumVoters returns the number of voters at |epoch|.
+	GetNumVoters(epoch blockchain.Epoch) int
 }
 
 type StartStopWaiter struct {
@@ -46,6 +97,72 @@ type StartStopWaiter struct {
 	stopChan chan interface{}
 	// The caller of Start() is responsible to notify the service is stopped via stoppedChan.
 	stoppedChan chan interface{}
+}
+
+//--------------------------------------------------------------------
+
+// Start calls action() and enters the running state;
+// the caller is responsible to use stoppedChan to notify the service started
+// by action() is stopped.
+func (s *StartStopWaiter) Start(
+	action func(chan interface{}) error, stoppedChan chan interface{},
+) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.stoppedChan != nil {
+		return errors.Errorf("is still running")
+	}
+	s.stopChan = make(chan interface{})
+	if err := action(s.stopChan); err != nil {
+		return err
+	}
+	s.stoppedChan = stoppedChan
+	return nil
+}
+
+func (s *StartStopWaiter) StopAndWait() error {
+	if err := s.Stop(); err != nil {
+		return err
+	}
+	return s.Wait()
+}
+
+func (s *StartStopWaiter) Stop() error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.stopChan == nil {
+		return errors.Errorf("Has called Stop() before; isRunning=%t", s.stoppedChan != nil)
+	}
+	close(s.stopChan)
+	s.stopChan = nil
+	//	close(s.stoppedChan)
+	//	s.stoppedChan = nil
+	return nil
+}
+
+func (s *StartStopWaiter) Wait() error {
+	s.mutex.Lock()
+	ch := s.stoppedChan
+	s.mutex.Unlock()
+	if ch != nil {
+		<-ch
+	}
+
+	s.mutex.Lock()
+	s.stoppedChan = nil
+	s.mutex.Unlock()
+	return nil
+}
+
+type NodeConfig struct {
+	LoggingId  string
+	K          uint32 // The outstanding window
+	Chain      blockchain.BlockChain
+	NodeClient NodeClient
+	Role       RoleAssigner
+	Verifier   blockchain.Verifier
+	Epoch      blockchain.Epoch
+	Timer      Timer
 }
 
 // Note that all methods do not return error. This allows the client to execute asynchronously.
@@ -95,133 +212,6 @@ type Node struct {
 	workChan chan work
 }
 
-type BlockCreator int
-
-const (
-	BlockCreatedByOther = BlockCreator(0)
-	BlockCreatedBySelf  = BlockCreator(1)
-)
-
-type work struct {
-	// The main data.
-	blob interface{}
-	// The aux data for blob
-	context interface{}
-	// Return the result via ch
-	ch chan error
-}
-
-type notarizedBlock struct {
-	notarization blockchain.Notarization
-	block        blockchain.Block
-}
-
-type proposalContext struct {
-	source  *network.Message
-	creator BlockCreator
-}
-
-// A node can have multiple roles. When doing the proposer/voter reconfiguration,
-// need |id| to determine whether to establish/drop the connection.
-type RoleAssigner interface {
-	// IsProposer returns true if |id| is a proposer at |epoch|.
-	// If |id| is an empty string, it means asking whether itself is a proposer.
-	IsProposer(id string, epoch blockchain.Epoch) bool
-	// IsPrimaryProposer returns true if |id| is the primary proposer at |epoch|.
-	// If |id| is an empty string, it means asking whether itself is a proposer.
-	IsPrimaryProposer(id string, epoch blockchain.Epoch) bool
-	// IsVoter returns true if |id| is a voter at |epoch|.
-	// If |id| is an empty string, it means asking whether itself is a voter.
-	IsVoter(id string, epoch blockchain.Epoch) bool
-	// IsBootnode() returns true if |id| is a bootnode. Bootnodes are special nodes assigned
-	// in the configurations/code without a term of office.
-	// If |id| is an empty string, it means asking whether itself is a bootnode.
-	IsBootnode(id string) bool
-	// GetProposerId returns the proposer id at |epoch| or an empty string.
-	GetProposerId(epoch blockchain.Epoch) string
-	// GetVoterId returns the voter id at |epoch| or an empty string.
-	GetVoterId(epoch blockchain.Epoch) string
-	// GetBootnodeId returns the bootnode id or an empty string.
-	GetBootnodeId() string
-	// GetDefaultProposerId() returns the default proposer id.
-	GetDefaultProposerId() string
-	// GetDefaultVoterId() returns the default voter id.
-	GetDefaultVoterId() string
-	// GetNumVoters returns the number of voters at |epoch|.
-	GetNumVoters(epoch blockchain.Epoch) int
-}
-
-// The item used with the ordered map (LLRB).
-type Item struct {
-	key   blockchain.BlockSn
-	value interface{}
-}
-
-//--------------------------------------------------------------------
-
-func init() {
-	// NOTE: This package logs detailed steps in debug logs. Uncomment this for debug.
-	//lgr.SetLogLevel("/", lgr.LvlDebug)
-	// Uncomment this to run faster.
-	// Removing verbose logs helps test potentially different race conditions.
-	//lgr.SetLogLevel("/", lgr.LvlError)
-}
-
-//--------------------------------------------------------------------
-
-// Start calls action() and enters the running state;
-// the caller is responsible to use stoppedChan to notify the service started
-// by action() is stopped.
-func (s *StartStopWaiter) Start(
-	action func(chan interface{}) error, stoppedChan chan interface{},
-) error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	if s.stoppedChan != nil {
-		return errors.Errorf("is still running")
-	}
-	s.stopChan = make(chan interface{})
-	if err := action(s.stopChan); err != nil {
-		return err
-	}
-	s.stoppedChan = stoppedChan
-	return nil
-}
-
-func (s *StartStopWaiter) StopAndWait() error {
-	if err := s.Stop(); err != nil {
-		return err
-	}
-	return s.Wait()
-}
-
-func (s *StartStopWaiter) Stop() error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	if s.stopChan == nil {
-		return errors.Errorf("Has called Stop() before; isRunning=%t", s.stoppedChan != nil)
-	}
-	close(s.stopChan)
-	s.stopChan = nil
-	return nil
-}
-
-func (s *StartStopWaiter) Wait() error {
-	s.mutex.Lock()
-	ch := s.stoppedChan
-	s.mutex.Unlock()
-	if ch != nil {
-		<-ch
-	}
-
-	s.mutex.Lock()
-	s.stoppedChan = nil
-	s.mutex.Unlock()
-	return nil
-}
-
-//--------------------------------------------------------------------
-
 func NewNode(cfg NodeConfig) Node {
 	return Node{
 		loggingId: cfg.LoggingId,
@@ -241,6 +231,18 @@ func NewNode(cfg NodeConfig) Node {
 		workChan: make(chan work, 1024),
 	}
 }
+
+//--------------------------------------------------------------------
+
+func init() {
+	// NOTE: This package logs detailed steps in debug logs. Uncomment this for debug.
+	//lgr.SetLogLevel("/", lgr.LvlDebug)
+	// Uncomment this to run faster.
+	// Removing verbose logs helps test potentially different race conditions.
+	//lgr.SetLogLevel("/", lgr.LvlError)
+}
+
+//--------------------------------------------------------------------
 
 func (n *Node) Start() error {
 	stoppedChan := make(chan interface{})
@@ -272,7 +274,7 @@ func (n *Node) handleEventLoop(
 				break
 			}
 			if err = n.onTimeout(); err != nil {
-				logger.Warn("[%s] %s", err)
+				logger.Warn("%s", err)
 			}
 			// Reset the timer, so voters will resend ClockMsg after timeout happens again.
 			// Otherwise, proposers which connect to voters after sending ClockMsg
@@ -332,11 +334,6 @@ func (n *Node) handleEventLoop(
 // Run in the worker goroutine
 // This function is only called on voters.
 func (n *Node) onTimeout() error {
-	// The node may not be a voter after the timeout.
-	if !n.role.IsVoter("", n.epoch) {
-		return nil
-	}
-
 	epoch := n.epoch
 	if !n.role.IsVoter("", epoch) {
 		return errors.Errorf("non-voter calls onTimeout at epoch %d", epoch)
@@ -409,6 +406,32 @@ func (n *Node) onReceivedBlock(b blockchain.Block, creator BlockCreator) error {
 	return nil
 }
 
+// Possible callers:
+// * Received enough votes -> a new notarization.
+// * Received a new block which contains some notarizations.
+// * Actively pull notarization from the other nodes.
+//
+// Run in the worker goroutine
+func (n *Node) onReceivedNotarization(nota blockchain.Notarization) error {
+	// Ensure the node stores the block before the notarization. This ensures the freshest
+	// notarized chain grows in order. Maybe this is not necessary.
+	if !n.chain.ContainsBlock(nota.GetBlockSn()) {
+		logger.Debug("[%s] onReceivedNotarization: %s (reject early notarization)",
+			n.loggingId, nota.GetBlockSn())
+		return nil
+	}
+
+	logger.Debug("[%s] onReceivedNotarization: %s", n.loggingId, nota.GetBlockSn())
+	existedNota := n.chain.GetNotarization(nota.GetBlockSn())
+	if existedNota != nil && existedNota.GetNVote() >= nota.GetNVote() {
+		return nil
+	}
+	if err := n.verifier.VerifyNotarization(nota); err != nil {
+		return errors.Errorf("invalid notarization %s; err=%s", nota.GetBlockSn(), err)
+	}
+	return n.chain.AddNotarization(nota)
+}
+
 // Run in the worker goroutine
 func (n *Node) onReceivedProposal(p blockchain.Proposal, ctx proposalContext) error {
 	logger.Debug("[%s] onReceivedProposal: %s", n.loggingId, p.GetBlockSn())
@@ -417,7 +440,7 @@ func (n *Node) onReceivedProposal(p blockchain.Proposal, ctx proposalContext) er
 		msg := fmt.Sprintf("skip proposal %s because local epoch=%d is different",
 			p.GetBlockSn(), n.epoch)
 		err := errors.Errorf(msg)
-		logger.Info("[%s] %s", n.loggingId, msg)
+		logger.Warn("[%s] %s", n.loggingId, msg)
 		return err
 	}
 
@@ -431,9 +454,6 @@ func (n *Node) onReceivedProposal(p blockchain.Proposal, ctx proposalContext) er
 	}
 
 	b := p.GetBlock()
-	if b == nil {
-		return errors.Errorf("invalid proposal")
-	}
 
 	// If the proposal comes from outside, add it to our local blockchain if needed.
 	if ctx.creator == BlockCreatedByOther {
@@ -492,15 +512,13 @@ func (n *Node) onReceivedProposal(p blockchain.Proposal, ctx proposalContext) er
 			first := n.chain.GetBlock(blockchain.BlockSn{Epoch: sn.Epoch, S: 1})
 			lastSnInPreviousEpoch := first.GetParentBlockSn()
 			r := lastSnInPreviousEpoch.Compare(fnbs)
-			if r != 0 {
-				if r < 0 {
-					return errors.Errorf("skip proposal %s because the last block in previous epoch %s "+
-						"is older than freshest notarized block %s", sn, lastSnInPreviousEpoch, fnbs)
-				} else {
-					n.client.CatchUp(ctx.source, lastSnInPreviousEpoch)
-					return errors.Errorf("skip proposal %s because the last block in previous epoch %s "+
-						"is newer than freshest notarized block %s", sn, lastSnInPreviousEpoch, fnbs)
-				}
+			if r < 0 {
+				return errors.Errorf("skip proposal %s because the last block in previous epoch %s "+
+					"is older than freshest notarized block %s", sn, lastSnInPreviousEpoch, fnbs)
+			} else if r > 0 {
+				n.client.CatchUp(ctx.source, lastSnInPreviousEpoch)
+				return errors.Errorf("skip proposal %s because the last block in previous epoch %s "+
+					"is newer than freshest notarized block %s", sn, lastSnInPreviousEpoch, fnbs)
 			}
 		}
 	}
@@ -567,33 +585,6 @@ func (n *Node) onReceivedVote(v blockchain.Vote) error {
 	return n.onReceivedNotarization(nota)
 }
 
-// Possible callers:
-// * Received enough votes -> a new notarization.
-// * Received a new block which contains some notarizations.
-// * Actively pull notarization from the other nodes.
-//
-// Run in the worker goroutine
-func (n *Node) onReceivedNotarization(nota blockchain.Notarization) error {
-	// Ensure the node stores the block before the notarization. This ensures the freshest
-	// notarized chain grows in order. Maybe this is not necessary.
-	if !n.chain.ContainsBlock(nota.GetBlockSn()) {
-		logger.Debug("[%s] onReceivedNotarization: %s (reject early notarization)",
-			n.loggingId, nota.GetBlockSn())
-		return nil
-	}
-
-	logger.Debug("[%s] onReceivedNotarization: %s", n.loggingId, nota.GetBlockSn())
-	existedNota := n.chain.GetNotarization(nota.GetBlockSn())
-	if existedNota != nil && existedNota.GetNVote() >= nota.GetNVote() {
-		return nil
-	}
-	if err := n.verifier.VerifyNotarization(nota); err != nil {
-		return errors.Errorf("invalid notarization %s; err=%s", nota.GetBlockSn(), err)
-	}
-	return n.chain.AddNotarization(nota)
-}
-
-// Only called by proposer
 // This function is only called on proposers.
 func (n *Node) onReceivedClockMsg(c blockchain.ClockMsg) error {
 	logger.Debug("[%s] onReceivedClockMsg: %d by %s", n.loggingId, c.GetEpoch(), c.GetVoterId())
@@ -789,6 +780,8 @@ func (n *Node) AddFinalizedChainExtendedEvent(
 func (n *Node) isVoted(sn blockchain.BlockSn) bool {
 	return LLRBItemToBool(n.voted.Get(ToItem(sn)))
 }
+
+//------------------ non worker goroutine functions of Node ------------------
 
 func (n *Node) isNotarizationBroadcasted(sn blockchain.BlockSn) bool {
 	return n.broadcastedNotas[sn]

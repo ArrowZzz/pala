@@ -1,6 +1,7 @@
 package blockchain
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"pala/lgr"
@@ -349,16 +350,7 @@ func (s BlockSn) ToBytes() []byte {
 }
 
 func (h Hash) Equal(other Hash) bool {
-	if len(h) != len(other) {
-		return false
-	}
-
-	for i := 0; i < len(h); i++ {
-		if h[i] != other[i] {
-			return false
-		}
-	}
-	return true
+	return bytes.Compare(h, other) == 0
 }
 
 //--------------------------------------------------------------------
