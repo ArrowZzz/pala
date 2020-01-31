@@ -708,6 +708,8 @@ func (n *Node) onReceivedNotarizedBlock(nota blockchain.Notarization, b blockcha
 	return n.onReceivedNotarization(nota)
 }
 
+//------------------ non worker goroutine functions of Node ------------------
+
 func (n *Node) SetEpoch(epoch blockchain.Epoch) chan error {
 	ch := make(chan error, 1)
 	n.workChan <- work{epoch, nil, ch}
@@ -780,8 +782,6 @@ func (n *Node) AddFinalizedChainExtendedEvent(
 func (n *Node) isVoted(sn blockchain.BlockSn) bool {
 	return LLRBItemToBool(n.voted.Get(ToItem(sn)))
 }
-
-//------------------ non worker goroutine functions of Node ------------------
 
 func (n *Node) isNotarizationBroadcasted(sn blockchain.BlockSn) bool {
 	return n.broadcastedNotas[sn]

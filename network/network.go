@@ -429,7 +429,7 @@ func (m *Message) GetAttribute() uint16 {
 }
 
 func (m *Message) IsRelay() bool {
-	return (m.attribute & AttrRelay) > 0
+	return m.attribute == AttrRelay
 }
 
 func (m *Message) GetConnectionHandle() ConnectionHandle {
@@ -441,7 +441,7 @@ func (m *Message) GetBlob() []byte {
 }
 
 func (m *Message) Reply(msg *Message) error {
-	if msg.source != nil {
+	if msg.source == nil {
 		return errors.Errorf("Reply is called with source == nil")
 	}
 	return m.source.write(newPacket(msg))

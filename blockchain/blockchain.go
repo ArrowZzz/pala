@@ -284,8 +284,8 @@ func GetParentBlock(bc BlockChain, b Block) Block {
 
 //--------------------------------------------------------------------
 
-// NewBlockSnFromBytes unmarshal the output of BlockSn.ToBytes().
-// Return the result and the rest of the bytes.
+// NewBlockSnFromBytes unmarshal the serialzed block (in byte array), extract
+// the block seq #, the rest of the bytes and errors if any.
 func NewBlockSnFromBytes(bytes []byte) (BlockSn, []byte, error) {
 	var sn BlockSn
 	if len(bytes) < 8 {
