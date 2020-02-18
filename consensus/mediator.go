@@ -1363,7 +1363,7 @@ func (m *Mediator) handshake(msg *network.Message) {
 		}
 		key := m.host.GetTLSPublicKey(msg.GetConnectionHandle())
 		if err := m.verifier.VerifySignature(id, signature, key); err != nil {
-			if m.role.IsBootnode(m.role.GetBootnodeId()) {
+			if m.role.IsBootnode("") {
 				// A bootnode accepts any connection to help proposer/voter candidates catch up,
 				// so ignore the error.
 				// TODO(thunder): prioritize connections to avoid a DoS.

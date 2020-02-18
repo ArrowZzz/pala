@@ -1,15 +1,31 @@
 # Make sure the working directory is under $GOPATH\src 
 
 #-include Local.mk
+TOP_DIR := $(shell pwd)
+GOBIN := $(TOP_DIR)/bin
+TARGET := pala
 
 PREFERRED_INTERACTIVE_SHELL ?= bash
 GO ?= go
 GO_TEST_ARGS ?= "-count=1"
 
-PALA_PKGS := $(shell GOPATH=$(GOPATH) $(GO) list ./...)
+# Make the default target (first target) to all.
+default: all
+
+.PHONY: all
+all: ${TARGET} test
+
+PALA_PKGS := $(shell GOPATH=$(GOPATH) $(GO) list ./... | grep -v consensus_test | grep -v network_test )
+PALA_ALL_PKGS := $(shell GOPATH=$(GOPATH) $(GO) list ./...)
+
+.PHONY: $(TARGET)
+$(TARGET):
+	@echo "Building $(GOFUN_SRC) to ./bin"
+	@GOPATH=$(GOPATH) GOBIN=$(GOBIN) $(GO) install $(PALA_PKGS)
+
 .PHONY: test
 test:
-	$(GO) test $(GO_TEST_ARGS) $(PALA_PKGS)
+	$(GO) test -cover $(GO_TEST_ARGS) $(PALA_ALL_PKGS)
 
 .PHONY: dep
 dep: Gopkg.dep
@@ -28,8 +44,8 @@ lint:
 
 .PHONY: vet
 vet:
-	$(GO) vet $(PALA_PKGS)	
+	$(GO) vet $(PALA_ALL_PKGS)	
 
 .PHONY: clean
 clean:
-	rm -rf pkg/
+	rm -rf pkg/ bin/

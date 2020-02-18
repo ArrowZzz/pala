@@ -45,6 +45,15 @@ The code has been tested on tested it on Fedora 29 and MacOS with go1.13.4
    ```
    $ make dep 
    $ make test
+    ok  	pala/blockchain	0.462s	coverage: 59.2% of statements
+    ?   	pala/cmd	[no test files]
+    ok  	pala/consensus	1.269s	coverage: 29.7% of statements
+    ok  	pala/consensus_test	10.851s	coverage: [no statements]
+    ok  	pala/lgr	0.234s	coverage: 81.4% of statements
+    ?   	pala/network	[no test files]
+    ok  	pala/network_test	0.568s	coverage: [no statements]
+    ?   	pala/testutils	[no test files]
+    ?   	pala/utils	[no test files]
    ```
 
 ## Distributed Consensus in Practice
